@@ -10,7 +10,7 @@ The Washington Post story **[A low-flying
 
 * **[data](data)** - geojson, kml, csvs, shapefiles, and images detailing aircraft locations
 * **[html](html)** - various maps generated with leaflet and mapbox to explore the data visually
-* **[scripts](scripts)** - R scripts to process and adjust the data, as well as generate exploratory maps in 3D and in leaflet and mapbox.
+* **[scripts](scripts)** - R scripts to process and adjust the data, as well as generate exploratory maps in 3D and in leaflet, mapbox and rayshader.
 * **[tif](tif)** - Where tif files used to generated the base of 3D imagery would go. But files are too large for Github to store so this folder is blank.
 
 # Notebooks
