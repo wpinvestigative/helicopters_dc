@@ -2,6 +2,7 @@ tif/LC08_L1TP_015033_20200510_20200526_01_T1_B2.TIF
 tif/LC08_L1TP_015033_20200510_20200526_01_T1_B3.TIF
 tif/LC08_L1TP_015033_20200510_20200526_01_T1_B4.TIF
 tif/mosaicfilled.tif
+tif/dc_dsm_patched.tif
 scripts/02_mapdeck.R
 scripts/03_ray.R
 scripts/dc_3d.R
