@@ -1,0 +1,48 @@
+tif/LC08_L1TP_015033_20200510_20200526_01_T1_B2.TIF
+tif/LC08_L1TP_015033_20200510_20200526_01_T1_B3.TIF
+tif/LC08_L1TP_015033_20200510_20200526_01_T1_B4.TIF
+tif/mosaicfilled.tif
+scripts/02_mapdeck.R
+scripts/03_ray.R
+scripts/dc_3d.R
+scripts/01_scraper.R
+scripts/mapbox_key.R
+
+# .ds_store
+.DS_Store
+
+# History files
+.Rhistory
+.Rapp.history
+
+# Session Data files
+.RData
+
+# Example code in package build process
+*-Ex.R
+
+# Output files from R CMD build
+/*.tar.gz
+
+# Output files from R CMD check
+/*.Rcheck/
+
+# RStudio files
+.Rproj.user/
+
+# produced vignettes
+vignettes/*.html
+vignettes/*.pdf
+
+# OAuth2 token, see https://github.com/hadley/httr/releases/tag/v0.3
+.httr-oauth
+
+# knitr and R markdown default cache directories
+/*_cache/
+/cache/
+
+# Temporary files created by R markdown
+*.utf8.md
+*.knit.md
+
+.Rproj.user
