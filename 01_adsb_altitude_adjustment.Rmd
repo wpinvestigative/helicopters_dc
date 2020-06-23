@@ -1,0 +1,82 @@
+---
+title: "ADS-B data processing"
+output: html_document
+author: "John Muyskens"
+---
+
+```{r setup, warning=F, message=F}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(sf)
+library(sp)
+library(lubridate)
+library(mosaic)
+library(raster)
+```
+
+Let's load our data and do some processing. The file `data/heli.csv` contains ADS-B data from several helicopters. We obtained this data from [ADS-B Exchange](https://www.adsbexchange.com/data/#) with permission. Please check with them before you scrape their site!
+
+To identify separate flights from a single helicopter, we will add segment breaks if there is a gap of more than 5 minutes for a particular helicopter. It can be helpful to try shortening this period if you want to see where data for a flight is missing. We will also convert the timestamps from Unix epoch time (the number of seconds since Jan. 1, 1970) to POSIXct, a more useful R datetime format.
+
+```{r}
+heli_processed <- 
+  read_csv("data/heli.csv") %>% 
+  mutate(breaks = case_when(
+    timestamp - lag(timestamp) > 300 ~ 1, 
+    TRUE ~ 0)) %>% 
+  mutate(flightnum = cumsum(breaks)) %>% 
+  dplyr::select(-breaks) %>% 
+  mutate(
+    timestamp = as_datetime(start_time + timestamp, tz = "America/New_York"),
+    timestr = format_ISO8601(timestamp))
+```
+
+The ADS-B data contains two different measurements of altitude, both in units of feet. The column `altitude` contains altitude measurements based on barometric pressure. The column `alt_geom` contains the geometric altitude which is based on GPS and is relative to the WGS84 ellipsoid. Note that some of these readings are rounded to the nearest 25 feet, while others are rounded to the nearest 100. 
+
+The pressure-based altitude measurements are based on a standard pressure and are not corrected for the local pressure where the aircraft is flying, so we need to adjust them. The geometric altitude is more precise, but it doesn't update as frequently (usually only every fourth row in the data has `alt_geom`). Neither measurement is perfect for our purposes, so we will make do with what we have and make an adjustment to the pressure altitude based on the geometric altitude.
+
+One approach is to fit a linear model to a few hours of the data.  Note that we are modeling a short period of time so that the local barometric pressure doesn't vary too much. Also note that the assumption of a linear relationship only applies to low altitudes, so this method may not work in other situations, say with airplanes at cruising altitude. 
+
+```{r}
+altitude_model <- lm(alt_geom~altitude, data=filter(heli_processed, timestamp > ymd_h("2020-06-02 01") & timestamp < ymd_h("2020-06-02 03")))
+altitude_model_fun <- makeFun(altitude_model)
+# y-intercept is 152.2 feet
+```
+
+Our model reveals that the two altitude measures are highly corellated and are essentially translated from each other on the y-axis (the slope is very close to 1). This means we can alternatively use a simpler approach: adjusting the pressure altitude by the mean difference between the two measures. 
+
+```{r}
+heli_processed %>% 
+  filter(timestamp > ymd_h("2020-06-02 01") & timestamp < ymd_h("2020-06-02 03") & !is.na(alt_geom)) %>% 
+  mutate(pressure_geometric_altitude_difference = as.numeric(alt_geom) - as.numeric(altitude)) %>%
+  summarise(mean(pressure_geometric_altitude_difference))
+```
+
+The ADS-B geometric altitudes are relative to the WGS84 ellipsoid. Our ground elevation data uses the NAVD88 vertical datum, so we need to add an offset to correct for the height of the geoid. I used [a NOAA tool](https://vdatum.noaa.gov/vdatumweb/vdatumweb?a=171402120200617) to find the difference between WGS84(transit) and NAVD88 for a point in DC (coordinates -77.029395, 38.895809). This results in a datum shift of 32.059 meters (these offsets don't vary much over a small area). For a sanity check, the National Geodetic Survey has a data sheet for [the Jefferson Pier survey point](https://www.ngs.noaa.gov/cgi-bin/ds_mark.prl?PidBox=UA0024) which is close to the coordinates I chose.
+```{r}
+datum_shift <- 32.059 * 3.28084
+
+heli_processed_altitude <-
+  heli_processed %>% 
+  mutate(
+    altitude_modeled = altitude_model_fun(altitude) + datum_shift,
+    altitude_adjusted = altitude + 154 + datum_shift,
+    altitude_modeled_meters = altitude_modeled / 3.28084,
+    altitude_adjusted_meters = altitude_adjusted / 3.28084
+  )
+
+```
+
+To estimate the height of the helicopter off the ground, we need to compare our data to a digital elevation model (DEM) or digital surface model (DSM). The District of Columbia provides several high resolution LiDAR-derived DSM files in GeoTIFF format through [Open Data DC](https://opendata.dc.gov/search?q=digital%20surface%20model). Here we are using the [bare earth DSM from 2015](https://app.box.com/s/myjcdi02ghsbp0o2n4wsh8hj2j8p3tys) but there is also a more recent [DSM including buildings and trees from 2018](https://app.box.com/s/qedupea6k9cldn3l4b4eg9c2ajhtbxri). 
+
+To do this analysis, we first need to convert the rows into our data frame into geospatial points with the `sf` library. Then we can use the `raster` library to sample the values of our raster elevation data at each point in our flight data.
+
+```{r}
+heli_points <- st_as_sf(heli_processed_altitude, coords = c("lon", "lat")) %>% 
+  st_set_crs(4326)
+
+# Find the ground elevation in meters at each point.
+# Note that you will need to download https://app.box.com/s/myjcdi02ghsbp0o2n4wsh8hj2j8p3tys and point the following function to wherever you extract the GeoTIFF file (1.94 GB uncompressed). 
+# bare_earth <- raster("~/Downloads/BARE_EARTH_2015/BareEarth2015.tif")
+# heli_points$bare_earth_elevation <- raster::extract(bare_earth, heli_points, method='simple')
+```
